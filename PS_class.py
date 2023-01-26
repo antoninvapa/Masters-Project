@@ -326,8 +326,8 @@ class HaloMassFunction:
 
     def logderivative_filter(self, M, interpolate):
         sigma = interpolate(np.log10(M))
-        sigma_plus = interpolate(np.log10(1.1*M))
-        return (np.log(sigma_plus*sigma_plus)-np.log(sigma*sigma))/np.log(0.1*M), sigma
+        sigma_plus = interpolate(np.log10(1.01*M))
+        return (np.log(sigma_plus*sigma_plus)-np.log(sigma*sigma))/np.log(0.01*M), sigma
         
     
     def dndm_gen(self, M, interpolate):
