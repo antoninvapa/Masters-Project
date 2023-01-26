@@ -266,7 +266,6 @@ class Overdensities:
 _______________________________________________________________________________________________
 """
 
-
 class HaloMassFunction:
 
     def __init__(self, redshift, omega_m=0.27, omega_l=0.73, h=1.05, ns=0.95, sigma8=0.8, mass_function=None, Nbins=50, logmass_lim=(6, 20)):
@@ -322,7 +321,7 @@ class HaloMassFunction:
 
     def logderivative(self, M):
         sigma = self.S(M)
-        sigma_plus = self.S(M**1.1)
+        sigma_plus = self.S(M*1.1)
         return (np.log(sigma_plus*sigma_plus)-np.log(sigma*sigma))/np.log(0.1*M), sigma
 
     def logderivative_filter(self, M, interpolate):
@@ -492,4 +491,3 @@ class MergerRate:
         DT = self.Delta_c(z)
         DTplus = self.Delta_c(1.0001*z)
         return (DTplus-DT)/0.0001*z
-
