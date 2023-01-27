@@ -168,7 +168,7 @@ class Overdensities:
     def S_prep(self, m):
         gamma_f, c = (2*np.pi)**(2/3), 0.643
         R = c*(m/(gamma_f*self.rho_0))**(1/3)
-        s = integrate.quad(self.integrant, 0, np.inf, args=(R, self.GaussianFilter), epsrel=1e-2)[0]
+        s = integrate.quad(self.integrant, 0, np.inf, args=(R, self.GaussianFilter), epsrel=1e-2, limit=100)[0]
         return (s/(2*np.pi**2))**(1/2)
 
     def TransferFunction(self, k):
@@ -207,7 +207,7 @@ class Overdensities:
     
     def Sigma_of_R(self, Filter, R):
 
-        s2 = integrate.quad(self.integrant, 0, np.inf, args=(R, Filter), epsrel=1e-2)[0]
+        s2 = integrate.quad(self.integrant, 0, np.inf, args=(R, Filter), epsrel=1e-2, limit=100)[0]
         
         return (s2/(2*np.pi**2))**(1/2)
 
@@ -224,7 +224,7 @@ class Overdensities:
 
         R = c*(M/(gamma_f*self.rho_0))**(1/3)
 
-        s = integrate.quad(self.integrant, 0, np.inf, args=(R, Filter,), epsrel=1e-2)[0]
+        s = integrate.quad(self.integrant, 0, np.inf, args=(R, Filter,), epsrel=1e-2, limit=100)[0]
 
         return (s/(2*np.pi**2))**(1/2), R
     
@@ -298,7 +298,6 @@ class HaloMassFunction:
     Main function 
     _______________________________________________________________________________________________
     """
-
     def IMF(self, m, z):
         """Returns the halo mass function dn/dM in units of h^4 M_sun^-1 Mpc^-3
         Requires mass in units of M_sun /h """
@@ -312,22 +311,19 @@ class HaloMassFunction:
         IMF = np.abs(dlogsigma)*mass_func/m*rho_0
 
         return IMF
-        
     """
     _______________________________________________________________________________________________
     """
 
-
-
     def logderivative(self, M):
         sigma = self.S(M)
-        sigma_plus = self.S(M*1.1)
+        sigma_plus = self.S(M**1.1)
         return (np.log(sigma_plus*sigma_plus)-np.log(sigma*sigma))/np.log(0.1*M), sigma
 
     def logderivative_filter(self, M, interpolate):
         sigma = interpolate(np.log10(M))
-        sigma_plus = interpolate(np.log10(1.01*M))
-        return (np.log(sigma_plus*sigma_plus)-np.log(sigma*sigma))/np.log(0.01*M), sigma
+        sigma_plus = interpolate(1.1*np.log10(M))
+        return (np.log(sigma_plus*sigma_plus)-np.log(sigma*sigma))/np.log(0.1*M), sigma
         
     
     def dndm_gen(self, M, interpolate):
