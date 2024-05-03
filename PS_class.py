@@ -255,3 +255,107 @@ class HaloMassFunction:
         b = 1.406
         c = 1.210
         return A * (np.power(b / sigma, 1.0 * a) + 1) * np.exp(-1.0 * c / sigma / sigma)
+
+class MergerRate:
+    def __init__(self, redshift, redshift_lim=(0, 12), M_1=5e13, omega_m=0.27, omega_l=0.73, h=0.73, ns=0.95, sigma8=0.8, Nbins=50, logmass_lim=(6, 20)):
+        # Initialize MergerRate object with given parameters
+        self.omega_m0 = omega_m
+        self.omega_l0 = omega_l
+        self.logmass_lim = logmass_lim
+        self.sigma8 = sigma8
+        self.h = h
+        self.Nbins = Nbins
+        self.ns = ns
+        self.redshift = redshift
+        self.logmass_max = logmass_lim[1]
+        self.logmass_min = logmass_lim[0]
+        self.rho_0 = self.omega_m0 * 2.78e+11
+        self.M_1 = M_1
+        self.redshift_max_lim = redshift_lim[1]
+        self.redshift_min_lim = redshift_lim[0]
+
+        # Initialize HaloMassFunction object
+        self.HMF = HaloMassFunction(redshift, omega_m=omega_m, omega_l=omega_l, h=h, ns=ns, sigma8=sigma8, Nbins=Nbins, logmass_lim=logmass_lim)
+        
+        # Initialize GrowthFunction object
+        Growth = GrowthFunction(omega_m=omega_m, omega_l=omega_l)
+        self.Delta_c = Growth.Delta_c
+        self.Time = Growth.Time
+
+        # Initialize Overdensities object for interpolation
+        overden = Overdensities(0, omega_m=self.omega_m0, omega_l=self.omega_l0, h=self.h, ns=self.ns, sigma8=self.sigma8, Nbins_Sigma=self.Nbins, logmass_lim=self.logmass_lim)
+        self.S = overden.S
+
+    """Create a merger rate at a fixed final mass in terms of the redshift"""
+    def MergerRate_M_Z(self, M2, M1, Z):
+        # Calculate derivative of log(sigma) and sigma for M2
+        der, sigma2 = self.logderivative(M2)
+        # Calculate sigma for M1
+        sigma1 = self.S(M1)
+
+        # Calculate merger rate
+        MR = M2 / (2 * np.pi)**(1 / 2) * np.abs(2 / 3 * self.Delta_c(Z) / self.Time(Z) * der) * ((sigma1 / sigma2)**2 / (sigma1**2 - sigma2**2))**(3 / 2) * np.exp(-0.5 * self.Delta_c(Z)**2 * (1 / sigma2**2 - 1 / sigma1**2))
+
+        return MR
+    
+    def MergerRate_M_Z2(self, M2, M1, Z):
+        # Calculate derivative of log(sigma) and sigma for M2 using interpolation
+        interpolate = self.overden.interpolates[1]
+        der, sigma2 = self.derivative2(M2, interpolate)
+        # Calculate sigma for M1 using interpolation
+        sigma1 = interpolate(np.log10(M1))
+
+        # Calculate merger rate
+        MR = M2 / (2 * np.pi)**(1 / 2) * np.abs(2 / 3 * self.Delta_c(Z) / self.Time(Z) * der) * ((sigma1 / sigma2)**2 / (sigma1**2 - sigma2**2))**(3 / 2) * np.exp(-0.5 * self.Delta_c(Z)**2 * (1 / sigma2**2 - 1 / sigma1**2))
+
+        return MR
+
+    """Create a merger rate at a fixed redshift in terms of the mass"""
+    def MergerRate_of_M2(self):
+        # Initialize Overdensities object for interpolation
+        overden = Overdensities(self.redshift, omega_m=self.omega_m0, omega_l=self.omega_l0, h=self.h, ns=self.ns, sigma8=self.sigma8, Nbins_Sigma=self.Nbins, logmass_lim=self.logmass_lim)
+        interpolate = overden.interpolates[1]
+
+        # Initialize arrays for mass range and merger rate
+        DeltaM = np.empty(self.Nbins, dtype=object)
+        LogdeltaM = np.empty(self.Nbins, dtype=object)
+        MR = np.empty(self.Nbins, dtype=object)
+
+        logDMmin = -2
+        logDMmax = 2
+        sigma1 = interpolate(np.log10(self.M_1))
+        dlogm = (logDMmax - logDMmin) / self.Nbins
+
+        # Loop over mass bins to calculate merger rate
+        for i in range(self.Nbins):
+            thislogDM = logDMmin + i * dlogm
+            thisDM = 10**(thislogDM) * self.M_1
+            thisM2 = thisDM + self.M_1
+
+            der, sigma2 = self.logderivative2(thisM2, interpolate)
+
+            MR[i] = 3 / 1e-3 * (2 / np.pi)**(1 / 2) / self.Time(self.redshift) * 2 / 3 * thisDM / thisM2 * np.abs(der) * self.Delta_c(self.redshift) / sigma2 / (1 - (sigma2 / sigma1)**2)**(3 / 2) * np.exp(-0.5 * self.Delta_c(self.redshift)**2 * (1 / sigma2**2 - 1 / sigma1**2))
+            DeltaM[i] = thisDM
+            LogdeltaM[i] = thislogDM
+
+        return MR, DeltaM, LogdeltaM
+
+    def logderivative(self, M):
+        sigma = self.S(M)
+        sigma_plus = self.S(1.00000000001 * M)
+        return (sigma_plus * sigma_plus - sigma * sigma) / (0.00000000001 * M), sigma
+            
+    def logderivative2(self, M, interpolate):
+        sigma = interpolate(np.log10(M))
+        sigma_plus = interpolate(np.log10(1.1 * M))
+        return (np.log(sigma_plus) - np.log(sigma)) / np.log(0.1 * M), sigma
+    
+    def derivative2(self, M, interpolate):
+        sigma = interpolate(np.log10(M))
+        sigma_plus = interpolate(np.log10(1.00000000001 * M))
+        return (sigma_plus * sigma_plus - sigma * sigma) / (0.00000000001 * M), sigma
+    
+    def Delta_c_derivative(self, z):
+        DT = self.Delta_c(z)
+        DTplus = self.Delta_c(1.0001 * z)
+        return (DTplus - DT) / 0.0001 * z
