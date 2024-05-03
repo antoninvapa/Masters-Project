@@ -5,13 +5,14 @@ from astropy import constants
 from astropy import units as u
 import scipy.interpolate
 import math
+import numpy as np
 
 """
 _______________________________________________________________________________________________
 """
 
 class GrowthFunction:
-    def __init__(self, h=0.73, omega_m=0.27,omega_l=0.73):
+    def __init__(self, h=0.67, omega_m=0.32,omega_l=0.68):
         self.omega_m0 = omega_m
         self.omega_l0 = omega_l
         self.H_0=((h*100*u.km*u.s**-1*u.Mpc**-1).to(u.Gyr**-1)).value
@@ -75,7 +76,7 @@ ________________________________________________________________________________
 
 class Overdensities:
     
-    def __init__(self,redshift=0,h7=1.05,h=0.73,omega_m=0.27,omega_l=0.73, ns=0.95,sigma8=0.8,Nbins_Sigma=50,logmass_lim=(4, 20)):
+    def __init__(self,redshift=0,h7=0.962,h=0.67,omega_m=0.32,omega_l=0.68, ns=0.967,sigma8=0.808,Nbins_Sigma=50,logmass_lim=(4, 20)):
 
         if (h<=0.0):
             raise ValueError("Overdensities(): Negative Hubble constant illegal.\n")
@@ -111,7 +112,7 @@ class Overdensities:
 
         #Normalization of the power spectrum
         self.N=1
-        self.N=sigma8*sigma8 / (self.Sigma_of_R(self.TopHatFilter, 11.4))**2
+        self.N=sigma8*sigma8 / (self.Sigma_of_R(11.4))**2
         
 
         # output arrays
@@ -120,30 +121,7 @@ class Overdensities:
         # mass (M_sun/h)
         self.M = np.empty(self.Nbins_Sigma,dtype='float64')
         self.logM = np.empty(self.Nbins_Sigma,dtype='float64')
-        #self.M = np.logspace(self.logmass_min, self.logmass_max, self.Nbins_Sigma)
-        # sigma(M, z=0, where mass is in [M_sun/h])
-        # array of sigma for three different filters
-        self.Sigmas = np.empty(3, dtype=object)
-        self.Sigmasz = np.empty(3, dtype=object)
-        self.interpolates = np.empty(3, dtype=object)
-
-        #we can initialize sigma(M) for the different filter to then interpolate
-        self.Filters = (self.TopHatFilter, self.GaussianFilter, self.KSharpFilter)
-        self.Ints = np.empty(3, dtype=object)
-
-        for i in range(3):
-
-            s, self.R = self.SigmaM_Array(self.Filters[i])
-            self.Sigma = s
-            self.Sigmas[i] = s
-            sz = self.SigmaM_of_z()
-            self.Sigmaz = sz
-            self.Sigmasz[i] = sz
-            interpolate = self.Interpolator()
-            self.interpolates[i] = interpolate
-            int = self.Sigma_of_M_and_z(self.M, interpolate)
-            self.Ints[i] = int
-
+       
     """
     Main function 
     Change filter if needed (self.GaussianFilter <-> self.KSharpFilter <-> self.TopHatFilter)
@@ -156,19 +134,15 @@ class Overdensities:
     def S_Z(self, m, z):
         sz = self.D_of_z(z)*self.S(m)
         return sz
-
-    def S_Z_interpolate(self, m, z, interpolate):
-        return self.D_of_z(z)*interpolate(np.log10(m))
-
     """
     _______________________________________________________________________________________________
     """
 
     
     def S_prep(self, m):
-        gamma_f, c = (2*np.pi)**(2/3), 0.643
+        gamma_f, c = (2*np.pi)**(2/3), 1.5
         R = c*(m/(gamma_f*self.rho_0))**(1/3)
-        s = integrate.quad(self.integrant, 0, np.inf, args=(R, self.GaussianFilter), epsrel=1e-2, limit=100)[0]
+        s = integrate.quad(self.integrant, 0, np.inf, args=R, epsrel=1e-2, limit=100)[0]
         return (s/(2*np.pi**2))**(1/2)
 
     def TransferFunction(self, k):
@@ -185,82 +159,19 @@ class Overdensities:
 
     def TopHatFilter(self, x):
         if x < 1e-2:
-            return 1-x**2/10+x**4/280
-            # return 1./3. - x**2/30. +x**4/840
+            #return 1-x**2/10+x**4/280
+            return 1./3. - x**2/30. +x**4/840
         else:
             return 3/(x)**3*(np.sin(x)-x*np.cos(x))
-        
-    def GaussianFilter(self, x):
-        if x < 1e-2:
-            return 1-x**2/2+x**4/8
-        else:
-            return np.exp(-x**2/2)
-        
-    def KSharpFilter(self, x):
-        if x <= 1:
-            return 1
-        else:
-            return 0
     
-    def integrant(self, k, R, Filter):
-        return k**2*self.PowerSpectrum(k)*Filter(k*R)**2
+    def integrant(self, k, R):
+        return k**2*self.PowerSpectrum(k)*self.TopHatFilter(k*R)**2
     
-    def Sigma_of_R(self, Filter, R):
+    def Sigma_of_R(self, R):
 
-        s2 = integrate.quad(self.integrant, 0, np.inf, args=(R, Filter), epsrel=1e-2, limit=100)[0]
+        s2 = integrate.quad(self.integrant, 0, np.inf, args=(R), epsrel=1e-2, limit=100)[0]
         
         return (s2/(2*np.pi**2))**(1/2)
-
-    def Sigma_of_M(self, Filter, M):
-
-        if Filter == self.TopHatFilter:
-            gamma_f, c = 4*np.pi/3, 1
-        
-        elif Filter == self.GaussianFilter:
-            gamma_f, c = (2*np.pi)**(2/3), 0.643
-        
-        elif Filter == self.KSharpFilter:
-            gamma_f, c = 6*np.pi**2, 1
-
-        R = c*(M/(gamma_f*self.rho_0))**(1/3)
-
-        s = integrate.quad(self.integrant, 0, np.inf, args=(R, Filter,), epsrel=1e-2, limit=100)[0]
-
-        return (s/(2*np.pi**2))**(1/2), R
-    
-    def SigmaM_Array(self, Filter):
-        
-        s = np.empty(self.Nbins_Sigma, dtype='float64')
-        R = np.empty(self.Nbins_Sigma, dtype='float64')
-
-        dm = (self.logmass_max - self.logmass_min)/self.Nbins_Sigma
-
-        for i in range(self.Nbins_Sigma):
-
-            logM = self.logmass_min + i*dm
-
-            M = 10.0**logM
-
-            s[i], R[i]= self.Sigma_of_M(Filter, M)
-
-            self.M[i] = M
-
-            self.logM[i] = logM
-
-        return s, R
-
-
-    """The final function is ready to be set up"""
-
-    def Interpolator(self):
-        return scipy.interpolate.InterpolatedUnivariateSpline(self.logM, self.Sigma)
-
-    def SigmaM_of_z(self):
-        sz = self.D_of_z(self.redshift)*self.Sigma
-        return sz
-
-    def Sigma_of_M_and_z(self, M, interpolate):
-        return self.D_of_z(self.redshift)*interpolate(np.log10(M))
 
 """
 _______________________________________________________________________________________________
@@ -268,11 +179,10 @@ ________________________________________________________________________________
 
 class HaloMassFunction:
 
-    def __init__(self, redshift, omega_m=0.27, omega_l=0.73, h=1.05, ns=0.95, sigma8=0.8, mass_function=None, Nbins=50, logmass_lim=(6, 20)):
+    def __init__(self, redshift, omega_m=0.32, omega_l=0.68, h=0.67, ns=0.967, sigma8=0.808, mass_function=None, Nbins=50, logmass_lim=(6, 20)):
         self.overden = Overdensities(redshift, omega_m=omega_m, omega_l=omega_l, h=h, ns=ns, sigma8=sigma8, Nbins_Sigma=Nbins, logmass_lim=logmass_lim)
         self.logM=self.overden.logM
         self.M = self.overden.M
-        self.interpolates=self.overden.interpolates
 
         if mass_function == None:
             self.mass_function = self.press_schechter
@@ -285,14 +195,6 @@ class HaloMassFunction:
         self.Delta_c = Growth.Delta_c
 
         self.S = self.overden.S
-
-        self.dndms=np.empty(3, dtype=object)
-
-        for i in range(3):
-
-            dndm=self.dndm_gen(self.M, self.interpolates[i])
-
-            self.dndms[i] = dndm
 
     """
     Main function 
@@ -319,26 +221,7 @@ class HaloMassFunction:
         sigma = self.S(M)
         sigma_plus = self.S(M**1.1)
         return (np.log(sigma_plus*sigma_plus)-np.log(sigma*sigma))/np.log(0.1*M), sigma
-
-    def logderivative_filter(self, M, interpolate):
-        sigma = interpolate(np.log10(M))
-        sigma_plus = interpolate(1.1*np.log10(M))
-        return (np.log(sigma_plus*sigma_plus)-np.log(sigma*sigma))/np.log(0.1*M), sigma
-        
     
-    def dndm_gen(self, M, interpolate):
-        """Returns the halo mass function dn/dM in units of h^4 M_sun^-1 Mpc^-3
-        Requires mass in units of M_sun /h """
-        # Mean matter density at redshift z in units of h^2 Msolar/Mpc^3
-        #This is rho_c in units of h^-1 M_sun (Mpc/h)^-3
-        rho_0 = self.overden.rho_0 #self.overden.omega_matter_of_z(self.overden.redshift)
-
-        dlogsigma, sigma = self.logderivative_filter(M, interpolate)
-        mass_func = self.mass_function(sigma)
-        
-        dndM =  np.abs(dlogsigma)*mass_func/M*rho_0
-
-        return dndM
 
     def press_schechter_z(self, sigma, z):
         """Press-Schechter (This form Lacey and Cole eq. 2.11 1993)"""
@@ -487,3 +370,113 @@ class MergerRate:
         DT = self.Delta_c(z)
         DTplus = self.Delta_c(1.0001*z)
         return (DTplus-DT)/0.0001*z
+    
+
+
+class MergerTree:
+
+    def __init__(self, omega_m=0.27, omega_l=0.73, h=0.73, ns=0.95, sigma8=0.8):
+        self.omega_m0 = omega_m
+        self.omega_l0 = omega_l
+        self.sigma8 = sigma8
+        self.h = h
+        self.ns = ns
+        self.rho_0 = self.omega_m0 * 2.78e+11
+
+        self.overdensity = Overdensities(0, omega_l=omega_l, omega_m=omega_m, h=h, sigma8=sigma8, ns=ns)
+        self.MergerRate = MergerRate(0, omega_l=omega_l, omega_m=omega_m, ns=ns, h=h, sigma8=sigma8)
+        self.Growth = GrowthFunction(omega_m=omega_m, omega_l=omega_l, h=h)
+
+        self.sigma = self.overdensity.S
+        self.Delta_c = self.Growth.Delta_c
+
+        m = np.logspace(0, 16, 1000)
+        sig = self.sigma(m)
+        int = scipy.interpolate.InterpolatedUnivariateSpline(m, sig)
+        self.sigma_int = np.vectorize(int)
+
+    def MT_Routine(self, M0, z0, z_m):
+
+        Ms = []
+        DM=M0
+        # Ml = 10**(np.log10(M0)-4)
+        
+        Ml=10**4
+        
+        i=0
+
+        while DM>Ml:
+            
+            # Ml = 10**(np.log10(DM)-4)
+            # sigma_c = self.Delta_c(z_m)
+            # M_c = self.M_finder(sigma_c**(-3/2)*DM, sigma_c)
+
+            # domegaC = 0.8+0.3*np.log10(DM/Ml)*self.OmegaStep(DM, DM-M_c)
+
+            domegaC = self.Delta_c(z_m)-self.Delta_c(z0)
+
+            M = self.M_picker(DM, domegaC)
+
+            DM=DM-M
+
+            if M>Ml:
+                Ms.append(M)
+                i+=1
+                
+            if i==2:
+                break
+            
+        # M_acc = M_and_z[0]-np.sum(np.array(Ms))
+
+        return Ms
+
+
+    def M_picker(self, M0, domega):
+
+        i=0
+
+        while i<1:
+            
+            # domega = np.random.uniform(0, domega)
+
+            x_output = np.abs(np.random.normal(0,1))
+
+            dS = (domega/(2*x_output))**2
+            
+            if dS<(domega/2)**2:
+                i+=1
+
+        S = self.sigma(M0)**2+dS
+
+        return self.M_finder(M0, S)
+    
+    # def Delta_Z(self, num_points):
+
+    #     z = np.linspace(10, 30, 100)
+    #     y = self.Delta_c(z)
+    #     z_int = scipy.interpolate.interp1d(y, z)
+    #     y_interp = np.linspace(y[0], y[-1], num_points)
+
+    #     return z_int(y_interp)
+
+
+    def M_finder(self, M0, S):
+        return float(scipy.optimize.fsolve(self.S_for_M, M0, args=S))
+        
+    def S_for_M(self, M, S):
+        return self.sigma_int(M)**2-S**2
+    
+    def derivative(self, M):
+        sigma = self.sigma(M)
+        sigma_plus = self.sigma(M+0.000000001)
+        return (sigma_plus*sigma_plus-sigma*sigma)/(0.000000001*M)
+    
+    def z_finder(self, z_0, domega):
+        Df = self.Delta_c(z_0)+domega
+        return float(scipy.optimize.fsolve(self.Delta_c_for_z, z_0, args=Df))
+
+    def Delta_c_for_z(self, z, D_z_f):
+        return self.Delta_c(z)-D_z_f
+
+    def OmegaStep(self, M0, dMc):
+        return np.sqrt(np.abs(self.derivative(M0))*dMc)
