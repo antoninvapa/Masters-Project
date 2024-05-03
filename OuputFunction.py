@@ -54,6 +54,11 @@ def HistMaker(bar_edges, bar_centers, bar_Y):
 def PowerLaw(x, A, a):
     return A * np.exp(-x * a)
 
+# Normalized power Law distribution function
+def PowerLaw_norm(x, A, a):
+    N_NH = integrate.quad(PowerLaw, 1, 7, args=(A, a))[0]
+    return A*np.exp(-x*a)/N_NH
+
 # Gaussian distribution function
 def Gaussian(x, s, mu):
     return (1 / (s * np.sqrt(2 * np.pi))) * np.exp(-(x - mu)**2 / (2 * s**2))
