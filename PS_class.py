@@ -297,7 +297,7 @@ class MergerRate:
         MR = M2 / (2 * np.pi)**(1 / 2) * np.abs(2 / 3 * self.Delta_c(Z) / self.Time(Z) * der) * ((sigma1 / sigma2)**2 / (sigma1**2 - sigma2**2))**(3 / 2) * np.exp(-0.5 * self.Delta_c(Z)**2 * (1 / sigma2**2 - 1 / sigma1**2))
 
         return MR
-    
+    """Gives the merger rate of the halo in term of the two masses M1 and M2 depending on z"""
     def MergerRate_M_Z2(self, M2, M1, Z):
         # Calculate derivative of log(sigma) and sigma for M2 using interpolation
         interpolate = self.overden.interpolates[1]
